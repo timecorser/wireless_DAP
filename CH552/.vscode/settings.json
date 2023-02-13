@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "Compound.C": "cpp",
+        "DEBUG.C": "cpp",
+        "GPIO.C": "cpp"
+    }
+}

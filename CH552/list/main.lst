@@ -1,0 +1,367 @@
+C51 COMPILER V9.54   MAIN                                                                  12/17/2022 15:57:51 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\obj\main.obj
+COMPILER INVOKED BY: D:\keil5\C51\BIN\C51.EXE main.c LARGE OPTIMIZE(0,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\list\main
+                    -.lst) TABS(2) OBJECT(.\obj\main.obj)
+
+line level    source
+
+   1          /********************************** (C) COPYRIGHT ******************************
+   2          * File Name          :Compound_Dev.C                      
+   3          * Author             : WCH                                                      
+   4          * Version            : V1.0                                                     
+   5          * Date               : 2017/03/15                                               
+   6          * Description        : A demo for USB compound device created by CH554, support 
+   7                       keyboard and mouse, and HID compatible device.           
+   8          ********************************************************************************/
+   9          #include  ".\Public\CH554.H"
+  10          #include  "Compound.h"
+  11          #include  ".\Public\debug.h"
+  12          #include  "stdio.h"
+  13          #include <stdio.h>
+  14          #include <string.h>
+  15          #include ".\Public\GPIO.H"
+  16          sbit check = P1^4;
+  17          UINT8 flag1_1 = 1;
+  18          
+  19          
+  20          extern UINT8  FLAG;                         // Trans complete flag
+  21          extern UINT8  EnumOK;                       // Enum ok flag 
+  22          
+  23          UINT8 Res;  
+  24          UINT8 D1_len=0,D2_len=0;
+  25          UINT8 Flag_3=0,Flag_4=0;
+  26          UINT8X USART_RX_BUF[66];     //?óê??o3?,×?′óUSART_REC_LEN??×??ú.
+  27          UINT8X USART3_RX_BUF[140];     //?óê??o3?,×?′óUSART_REC_LEN??×???.
+  28          //?óê?×′ì?
+  29          //bit15￡?  ?óê?íê3é±ê??
+  30          //bit14￡?  ?óê?μ?0x0d
+  31          //bit13~0￡?  ?óê?μ?μ?óDD§×??úêy??
+  32          UINT16 USART_RX_STA=0;       //?óê?×′ì?±ê??    
+  33          UINT16 USART3_RX_STA=0;       //?óê?×′ì?±ê?? 
+  34          UINT16 num_1 =0,num_2=0;          
+  35          
+  36          void DAP_Thread(void)
+  37          {
+  38   1          UINT8I num;
+  39   1      
+  40   1          if (USB_RequestFlag)
+  41   1          {
+  42   2          CH554UART0SendByte(0x66);
+  43   2          num_2 = 0;
+  44   2          num_1= 63;
+  45   2          while(1)
+  46   2          {
+  47   3            num_2 += Ep3Buffer[num_1];
+  48   3            if(num_2)break;
+  49   3            num_1--;
+  50   3          }
+  51   2          CH554UART0SendByte(num_1+1);
+  52   2          for(num=0;num<num_1+1;num++)
+  53   2          { 
+  54   3            CH554UART0SendByte(Ep3Buffer[num]);
+C51 COMPILER V9.54   MAIN                                                                  12/17/2022 15:57:51 PAGE 2   
+
+  55   3          }
+  56   2          while((USART_RX_STA&0x8000)==0);    
+  57   2          USART_RX_STA = 0; 
+  58   2          for(num=0;num<64;num++)
+  59   2          {
+  60   3            Ep3Buffer2[num] = USART_RX_BUF[num];//???1????
+  61   3          }
+  62   2          UEP3_CTRL = UEP3_CTRL & ~ MASK_UEP_R_RES | UEP_R_RES_ACK; //enable receive
+  63   2            UEP3_T_LEN = 64;
+  64   2            UEP3_CTRL = UEP3_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK; //enable send
+  65   2          USB_RequestFlag = 0;
+  66   2          }
+  67   1      }
+  68          
+  69          void main( void )
+  70          {
+  71   1        UINT8I num=0,lenth=0;
+  72   1        CfgFsys();//时钟选择配置
+  73   1        mDelaymS(5);//修改主频等待内部晶振稳定,必加
+  74   1        Port1Cfg(3,4);                                                             //P16设置推挽模式
+  75   1        
+  76   1        USBDeviceInit();//初始化USB设备 Configure the USB module,the Endpoint and the USB Interrupt
+  77   1        //UART1Setup();
+  78   1          EA = 1; 
+  79   1        UEP1_T_LEN = 0;//预使用发送长度一定要清空
+  80   1          UEP2_T_LEN = 0;//预使用发送长度一定要清空
+  81   1        UEP3_T_LEN = 0;//预使用发送长度一定要清空
+  82   1          Endp2Busy = 0;
+  83   1        while(flag1_1)
+  84   1        {
+  85   2          if(check == 0)
+  86   2          {
+  87   3            flag1_1=0;
+  88   3          }
+  89   2          mDelaymS(100);  
+  90   2        }
+  91   1        for(num=0;num<64;num++)
+  92   1        {
+  93   2          USART_RX_BUF[num]= 0;//???1????
+  94   2        }
+  95   1        mInitSTDIO();//串口0,可以用于调试
+  96   1        TI = 0;
+  97   1      //    while (!UsbConfig) {;};
+  98   1        while(1)
+  99   1        {
+ 100   2      //    if(USART_RX_STA&0x8000)
+ 101   2      //    {   
+ 102   2      //      USART_RX_STA = 0; 
+ 103   2      //      for(num=0;num<64;num++)
+ 104   2      //      {
+ 105   2      //        CH554UART0SendByte(USART_RX_BUF[num]);
+ 106   2      //      }
+ 107   2      //    }
+ 108   2      //    if(UsbConfig)//上位机打开串口
+ 109   2      //    {
+ 110   2      //      if(USBByteCount)   //USB接收端点有数据
+ 111   2      //      {
+ 112   2      //        if(!Endp2Busy)   //端点不繁忙（空闲后的第一包数据，只用作触发上传）
+ 113   2      //        {
+ 114   2      //          lenth = USBByteCount;   
+ 115   2      //          //写上传端点
+ 116   2      //          memcpy(Ep2Buffer+MAX_PACKET_SIZE,Ep2Buffer,lenth);
+C51 COMPILER V9.54   MAIN                                                                  12/17/2022 15:57:51 PAGE 3   
+
+ 117   2      //          UEP2_T_LEN = lenth;                                                    //预使用发送长度一定要清空
+ 118   2      //          UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 119   2      //          Endp2Busy = 1;
+ 120   2      //          UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_R_RES | UEP_R_RES_ACK;//主函数处理完，由主函数修改响应方式
+ 121   2      //          USBByteCount= 0;        
+ 122   2      //        }       
+ 123   2      //      }
+ 124   2      //    }
+ 125   2          DAP_Thread();
+ 126   2              if (USBByteCount)
+ 127   2              {
+ 128   3            lenth = USBByteCount;
+ 129   3            CH554UART0SendByte(0x67);
+ 130   3            CH554UART0SendByte(lenth);
+ 131   3            for(num=0;num<lenth;num++)
+ 132   3            {
+ 133   4              CH554UART0SendByte(Ep2Buffer[num]);
+ 134   4            }
+ 135   3      //            CH554UART0SendByte(Ep2Buffer[USBBufOutPoint++]);
+ 136   3                  USBByteCount=0;
+ 137   3                  if (USBByteCount == 0)
+ 138   3                      UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_R_RES | UEP_R_RES_ACK;
+ 139   3              }
+ 140   2          if(USBD0)
+ 141   2          {
+ 142   3      //      Ep2Buffer[64] =   USBD0;
+ 143   3      //      UEP2_T_LEN = 1;                                                    //预使用发送长度一定要清空
+ 144   3      //      UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 145   3      //      Endp2Busy = 1;
+ 146   3            
+ 147   3            CH554UART0SendByte(0x68);
+ 148   3            CH554UART0SendByte(1);
+ 149   3            CH554UART0SendByte(USBD0);
+ 150   3            USBD0 = 0;
+ 151   3          }
+ 152   2          if(USART3_RX_STA&0x8000)
+ 153   2          {
+ 154   3            if (!Endp2Busy)
+ 155   3            {
+ 156   4              lenth = USART3_RX_STA&0X0FFF;
+ 157   4              if(lenth<64)
+ 158   4              {
+ 159   5                memcpy(Ep2Buffer+64,&USART3_RX_BUF[0],lenth);
+ 160   5                UEP2_T_LEN = lenth;                                                    //预使用发送长度一定要清空
+ 161   5                UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 162   5                Endp2Busy = 1;
+ 163   5                USART3_RX_STA = 0;
+ 164   5              }else if(lenth==64)
+ 165   4              {
+ 166   5                memcpy(Ep2Buffer+64,&USART3_RX_BUF[0],lenth);
+ 167   5                UEP2_T_LEN = lenth;                                                    //预使用发送长度一定要清空
+ 168   5                UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 169   5                Endp2Busy = 1;
+ 170   5                while(Endp2Busy); 
+ 171   5                UEP2_T_LEN = 0;                                                    //预使用发送长度一定要清空
+ 172   5                UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 173   5                Endp2Busy = 1;
+ 174   5                USART3_RX_STA = 0;
+ 175   5              }else if(lenth>64)
+ 176   4              {
+ 177   5                for(num=0;num<(lenth/64);num++)
+ 178   5                {
+C51 COMPILER V9.54   MAIN                                                                  12/17/2022 15:57:51 PAGE 4   
+
+ 179   6                  memcpy(Ep2Buffer+64,&USART3_RX_BUF[num*64],64);
+ 180   6                  UEP2_T_LEN = 64;                                                    //预使用发送长度一定要清空
+ 181   6                  UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 182   6                  Endp2Busy = 1;
+ 183   6                  while(Endp2Busy); 
+ 184   6                  UEP2_T_LEN = 0;                                                    //预使用发送长度一定要清空
+ 185   6                  lenth-=64;
+ 186   6                }
+ 187   5                memcpy(Ep2Buffer+64,&USART3_RX_BUF[num*64],lenth);
+ 188   5                UEP2_T_LEN = lenth;                                                    //预使用发送长度一定要清空
+ 189   5                UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 190   5                Endp2Busy = 1;
+ 191   5                USART3_RX_STA = 0;
+ 192   5              }
+ 193   4            }
+ 194   3          }   
+ 195   2            
+ 196   2      //    if(UartByteCount)
+ 197   2      //        Uart_Timeout++;
+ 198   2      //    if(!Endp2Busy)   //端点不繁忙（空闲后的第一包数据，只用作触发上传）
+ 199   2      //    {
+ 200   2      //      lenth = UartByteCount;
+ 201   2      //      if(lenth>0)
+ 202   2      //      {
+ 203   2      //        if(lenth>39 || Uart_Timeout>100)
+ 204   2      //        {   
+ 205   2      //          Uart_Timeout = 0;
+ 206   2      //          UartByteCount -= lenth;     
+ 207   2      //          //写上传端点
+ 208   2      //          Uart_Output_Point+=lenth;
+ 209   2      //          if(Uart_Output_Point>=64)
+ 210   2      //            Uart_Output_Point = 0;            
+ 211   2      //          UEP2_T_LEN = lenth;                                                    //预使用发送长度一定要清空
+ 212   2      //          UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 213   2      //          Endp2Busy = 1;
+ 214   2      //        }
+ 215   2      //      }
+ 216   2      //    }
+ 217   2      //        if (USBByteCount)
+ 218   2      //        { 
+ 219   2      //      if (!Endp2Busy)
+ 220   2      //      {
+ 221   2      //        memcpy(Ep2Buffer+64,&Ep3Buffer[0],64);
+ 222   2      //        Uart_Output_Point+=64;
+ 223   2      //        UEP2_T_LEN = 64;                                                    //预使用发送长度一定要清空
+ 224   2      //        UEP2_CTRL = UEP2_CTRL & ~ MASK_UEP_T_RES | UEP_T_RES_ACK;            //应答ACK
+ 225   2      //        Endp2Busy = 1;
+ 226   2      //      }
+ 227   2      //        }   
+ 228   2          }
+ 229   1      }
+ 230          
+ 231          void Uart0_ISR(void) interrupt INT_NO_UART0
+ 232          {
+ 233   1        if(RI)  //?óê??D??(?óê?μ?μ?êy?Y±?D?ê?0x0d 0x0a?á?2)
+ 234   1        {
+ 235   2          Res = SBUF; //?áè??óê?μ?μ?êy?Y
+ 236   2          if(((USART_RX_STA&0x8000)||(USART3_RX_STA&0x8000))==0)
+ 237   2          {
+ 238   3            if(((USART_RX_STA&0x4000)||(USART3_RX_STA&0x4000))==0)
+ 239   3            {
+ 240   4              if(Res==0x66)
+C51 COMPILER V9.54   MAIN                                                                  12/17/2022 15:57:51 PAGE 5   
+
+ 241   4              {
+ 242   5                USART_RX_STA|=0x4000;//?óê?μ???í·
+ 243   5                Flag_3 = 1;
+ 244   5              }else if(Res==0x67)
+ 245   4              {
+ 246   5                USART3_RX_STA|=0x4000;//?óê?μ???í·
+ 247   5                Flag_4 = 1;
+ 248   5              }else
+ 249   4              {
+ 250   5                USART_RX_STA = 0;
+ 251   5                USART3_RX_STA = 0;
+ 252   5              }
+ 253   4            }else if((((USART_RX_STA&0x4000))&&(~(USART3_RX_STA&0x4000))))
+ 254   3            {
+ 255   4              if(Flag_3)
+ 256   4              {
+ 257   5                D1_len = Res;
+ 258   5                Flag_3 = 0;
+ 259   5              }else
+ 260   4              {
+ 261   5                USART_RX_BUF[USART_RX_STA&0X0FFF]=Res ;
+ 262   5                USART_RX_STA++;
+ 263   5                if((USART_RX_STA&0x0FFF)==D1_len)USART_RX_STA|=0x8000;  //?óê?íê3éá? 
+ 264   5              }
+ 265   4            }else if((((~USART_RX_STA&0x4000))&&((USART3_RX_STA&0x4000))))
+ 266   3            {
+ 267   4              if(Flag_4)
+ 268   4              {
+ 269   5                D2_len = Res;
+ 270   5                Flag_4 = 0;
+ 271   5              }else
+ 272   4              {
+ 273   5                USART3_RX_BUF[USART3_RX_STA&0X0FFF]=Res ;
+ 274   5                USART3_RX_STA++;
+ 275   5                if((USART3_RX_STA&0x0FFF)==D2_len)USART3_RX_STA|=0x8000;  //?óê?íê3éá? 
+ 276   5              }
+ 277   4            }
+ 278   3          }else if((((USART_RX_STA&0x8000))&&(~(USART3_RX_STA&0x8000))))
+ 279   2          {
+ 280   3            if((USART3_RX_STA&0x4000)==0)
+ 281   3            {
+ 282   4              if(Res==0x67)
+ 283   4              {
+ 284   5                USART3_RX_STA|=0x4000;//?óê?μ???í·
+ 285   5                Flag_4 = 1;
+ 286   5              }else
+ 287   4              {
+ 288   5                USART3_RX_STA = 0;
+ 289   5              }
+ 290   4            }else
+ 291   3            {
+ 292   4              if(Flag_4)
+ 293   4              {
+ 294   5                D2_len = Res;
+ 295   5                Flag_4 = 0;
+ 296   5              }else
+ 297   4              {
+ 298   5                USART3_RX_BUF[USART3_RX_STA&0X0FFF]=Res ;
+ 299   5                USART3_RX_STA++;
+ 300   5                if((USART3_RX_STA&0x0FFF)==D2_len)USART3_RX_STA|=0x8000;  //?óê?íê3éá? 
+ 301   5              }
+ 302   4            }
+C51 COMPILER V9.54   MAIN                                                                  12/17/2022 15:57:51 PAGE 6   
+
+ 303   3          }else if(((~(USART_RX_STA&0x8000))&&((USART3_RX_STA&0x8000))))
+ 304   2          {
+ 305   3            if((USART_RX_STA&0x4000)==0)
+ 306   3            {
+ 307   4              if(Res==0x66)
+ 308   4              {
+ 309   5                USART_RX_STA|=0x4000;//?óê?μ???í·
+ 310   5                Flag_3 = 1;
+ 311   5              }else
+ 312   4              {
+ 313   5                USART_RX_STA = 0;
+ 314   5              }
+ 315   4            }else
+ 316   3            {
+ 317   4              if(Flag_3)
+ 318   4              {
+ 319   5                D1_len = Res;
+ 320   5                Flag_3 = 0;
+ 321   5              }else
+ 322   4              {
+ 323   5                USART_RX_BUF[USART_RX_STA&0X0FFF]=Res ;
+ 324   5                USART_RX_STA++;
+ 325   5                if((USART_RX_STA&0x0FFF)==D1_len)USART_RX_STA|=0x8000;  //?óê?íê3éá? 
+ 326   5              }
+ 327   4            }
+ 328   3          }
+ 329   2          RI = 0;
+ 330   2        } 
+ 331   1      }
+ 332          
+ 333          /**************************** END *************************************/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1868    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    220    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =      3    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
